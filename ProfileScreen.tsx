@@ -11,6 +11,7 @@ export default function ProfileScreen() {
   const [userName, setUserName] = useState('');
   const [bio, setBio] = useState('');
   const [email, setEmail] = useState(''); 
+  const [points, setPoints] = useState(0);
   const [isLoading, setIsLoading] = useState(true); 
   const [isEditing, setIsEditing] = useState(false); 
 
@@ -28,10 +29,12 @@ export default function ProfileScreen() {
           const userData = userDocSnap.data();
           setUserName(userData.userName || '');
           setBio(userData.bio || '');
+          setPoints(userData.points || 0);
         } else {
           Alert.alert("お知らせ", "プロフィールデータが見つかりません。新規登録時の情報で表示します。");
           setUserName(user.email ? user.email.split('@')[0] : '名無しさん');
           setBio('まだ自己紹介がありません。');
+          setPoints(10); //データがない場合は10を表示
         }
       } catch (error) {
         console.error("プロフィールデータの取得エラー:", error);
@@ -66,6 +69,8 @@ export default function ProfileScreen() {
       await setDoc(doc(db, 'users', user.uid), {
         userName: userName,
         bio: bio,
+        points: 100,
+        createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(), 
       }, { merge: true }); 
 
@@ -106,6 +111,16 @@ export default function ProfileScreen() {
     <ScrollView contentContainerStyle={styles.scrollContainer} keyboardShouldPersistTaps="handled">
       <View style={styles.container}>
         <Text style={styles.title}>あなたのプロフィール</Text>
+
+        <View style={styles.profileItem}>
+          <Text style={styles.label}>現在の所持ポイント:</Text>
+          <Text style={styles.pointsValue}>{points} P</Text>
+        </View>
+
+        <View style={styles.profileItem}>
+          <Text style={styles.label}>メールアドレス:</Text>
+          <Text style={styles.value}>{email}</Text>
+        </View>
 
         <View style={styles.profileItem}>
           <Text style={styles.label}>メールアドレス:</Text>
@@ -209,6 +224,11 @@ const styles = StyleSheet.create({
   value: {
     fontSize: 16,
     color: '#333',
+  },
+  pointsValue: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    color: '#00796B',
   },
   input: {
     width: '100%',
