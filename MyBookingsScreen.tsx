@@ -25,7 +25,7 @@ interface Booking {
   id: string; // ドキュメントID
   skillId: string;
   skillTitle: string;
-  skillPrice: number;
+  skillPoints: number;
   instructorId: string;
   instructorName: string;
   studentId: string;
