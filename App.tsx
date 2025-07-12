@@ -15,6 +15,7 @@ import BookingScreen from './BookingScreen';
 import InstructorAvailabilityScreen from './InstructorAvailabilityScreen'; 
 import MySkillsManagementScreen from './MySkillsManagementScreen'; 
 import MyBookingsScreen from './MyBookingsScreen'; 
+import ChatScreen from './ChatScreen'; // ChatScreenをインポート
 
 // Firebase関連のインポート
 import { auth } from './firebaseConfig';
@@ -140,6 +141,11 @@ function AppStack() {
         name="MyBookings"
         component={MyBookingsScreen}
         options={{ title: '自分の予約' }}
+      />
+      <Stack.Screen // ChatScreenを追加
+        name="Chat"
+        component={ChatScreen}
+        options={{ title: 'チャット' }}
       />
     </Stack.Navigator>
   );
