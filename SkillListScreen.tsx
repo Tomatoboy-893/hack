@@ -1,15 +1,15 @@
 // SkillListScreen.tsx
 
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, FlatList, ActivityIndicator, SafeAreaView, Alert, TextInput, TouchableOpacity, ScrollView } from 'react-native';
-import { db } from './firebaseConfig'; 
-import { collection, getDocs, query, orderBy } from 'firebase/firestore'; 
-import { useNavigation } from '@react-navigation/native'; 
-import { MaterialCommunityIcons } from '@expo/vector-icons'; 
+import { View, Text, StyleSheet, FlatList, ActivityIndicator, SafeAreaView, Alert, TextInput, TouchableOpacity } from 'react-native';
+import { db } from './firebaseConfig';
+// ★変更点: orderByを削除し、クライアントサイドでソートするため
+import { collection, getDocs, query } from 'firebase/firestore';
+import { useNavigation } from '@react-navigation/native';
 
-// スキルデータの型定義
+// ★変更点: Skillの型定義に並び替え用のプロパティを追加
 interface Skill {
-  id: string; 
+  id: string;
   title: string;
   description: string;
   category: string;
@@ -17,37 +17,50 @@ interface Skill {
   instructorId: string;
   instructorName: string;
   duration: number;
+  createdAt: any; // 新しい順ソート用
 }
 
-export default function SkillListScreen() {
-  const navigation = useNavigation(); 
-  const [allSkills, setAllSkills] = useState<Skill[]>([]); 
-  const [filteredSkills, setFilteredSkills] = useState<Skill[]>([]); 
-  const [searchQuery, setSearchQuery] = useState(''); 
-  const [isLoading, setIsLoading] = useState(true); 
+// ★変更点: 並び替えオプションの型を定義
+type SortOption = 'title' | 'newest';
 
-  // カテゴリフィルタリング用のstate
-  const [categories, setCategories] = useState<string[]>([]); 
-  const [selectedCategory, setSelectedCategory] = useState<string | null>(null); 
+export default function SkillListScreen() {
+  const navigation = useNavigation();
+  const [allSkills, setAllSkills] = useState<Skill[]>([]);
+  const [filteredSkills, setFilteredSkills] = useState<Skill[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [isLoading, setIsLoading] = useState(true);
+
+  const [categories, setCategories] = useState<string[]>([]);
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+
+  // ★変更点: 並び替えオプション用のstateを追加 (デフォルトはタイトル順)
+  const [sortOption, setSortOption] = useState<SortOption>('title');
 
   useEffect(() => {
     const fetchSkills = async () => {
       try {
         const skillsCollectionRef = collection(db, 'skills');
-        const q = query(skillsCollectionRef, orderBy('title', 'asc')); 
+        // ★変更点: FirestoreクエリでのorderByを削除。クライアント側で柔軟にソートするため。
+        const q = query(skillsCollectionRef);
         const querySnapshot = await getDocs(q);
-        
+
         const fetchedSkills: Skill[] = [];
-        const uniqueCategories: Set<string> = new Set(); 
+        const uniqueCategories: Set<string> = new Set();
         querySnapshot.forEach((doc) => {
-          const skill = { id: doc.id, ...doc.data() as Omit<Skill, 'id'> };
+          const data = doc.data();
+          // ★変更点: createdAtがない場合に備えてデフォルト値を設定
+          const skill = {
+            id: doc.id,
+            ...data,
+            createdAt: data.createdAt || new Date(0).toISOString(),
+          } as Skill;
           fetchedSkills.push(skill);
-          uniqueCategories.add(skill.category); 
+          uniqueCategories.add(skill.category);
         });
-        
-        setAllSkills(fetchedSkills); 
-        setCategories(['全て', ...Array.from(uniqueCategories).sort()]); 
-        setFilteredSkills(fetchedSkills); 
+
+        setAllSkills(fetchedSkills);
+        setCategories(['全て', ...Array.from(uniqueCategories).sort()]);
+        setFilteredSkills(fetchedSkills);
       } catch (error) {
         console.error("スキルデータの取得エラー:", error);
         Alert.alert("エラー", "スキルデータの読み込みに失敗しました。");
@@ -57,11 +70,11 @@ export default function SkillListScreen() {
     };
 
     fetchSkills();
-  }, []); 
+  }, []);
 
-  // 検索クエリまたは選択カテゴリが変わるたびにフィルタリングを実行
+  // ★変更点: 検索、カテゴリ、並び替え順が変わるたびにフィルタリングとソートを実行
   useEffect(() => {
-    let currentFilteredSkills = allSkills;
+    let currentFilteredSkills = [...allSkills];
 
     // カテゴリでフィルタリング
     if (selectedCategory && selectedCategory !== '全て') {
@@ -70,9 +83,9 @@ export default function SkillListScreen() {
       );
     }
 
-    // 検索クエリによるフィルタリング (再度有効化)
+    // 検索クエリによるフィルタリング
     const lowerCaseQuery = searchQuery.toLowerCase();
-    if (lowerCaseQuery) { 
+    if (lowerCaseQuery) {
       currentFilteredSkills = currentFilteredSkills.filter(skill => {
         return (
           skill.title.toLowerCase().includes(lowerCaseQuery) ||
@@ -83,8 +96,21 @@ export default function SkillListScreen() {
       });
     }
 
+    // ★変更点: 並び替えを実行
+    switch (sortOption) {
+      case 'newest':
+        // createdAtの日付で降順ソート
+        currentFilteredSkills.sort((a, b) => new Date(b.createdAt?.toDate ? b.createdAt.toDate() : b.createdAt).getTime() - new Date(a.createdAt?.toDate ? a.createdAt.toDate() : a.createdAt).getTime());
+        break;
+      case 'title':
+      default:
+        // タイトルで昇順ソート
+        currentFilteredSkills.sort((a, b) => a.title.localeCompare(b.title));
+        break;
+    }
+
     setFilteredSkills(currentFilteredSkills);
-  }, [searchQuery, selectedCategory, allSkills]); 
+  }, [searchQuery, selectedCategory, allSkills, sortOption]); // sortOptionを依存配列に追加
 
   if (isLoading) {
     return (
@@ -95,23 +121,22 @@ export default function SkillListScreen() {
     );
   }
 
-  // 「予約する」ボタンクリックハンドラー
   const handleBookSkill = (skill: Skill) => {
     navigation.navigate('Booking', { skillId: skill.id, skillTitle: skill.title, skillPrice: skill.price, instructorId: skill.instructorId, instructorName: skill.instructorName });
   };
 
-  // スキルアイテムのレンダリング
   const renderSkillItem = ({ item }: { item: Skill }) => (
     <View style={styles.skillItem}>
-      {/* ★ここを修正: Textコンポーネント間に余計な空白や改行を入れない */}
-      <Text style={styles.skillTitle}>{item.title}</Text><Text style={styles.skillInstructor}>講師: {item.instructorName}</Text><Text style={styles.skillDescription}>{item.description}</Text><Text style={styles.skillDetails}>カテゴリ: {item.category} | 料金: ¥{item.price} | 時間: {item.duration}分</Text>
+      <Text style={styles.skillTitle}>{item.title}</Text>
+      <Text style={styles.skillInstructor}>講師: {item.instructorName}</Text>
+      <Text style={styles.skillDescription}>{item.description}</Text>
+      <Text style={styles.skillDetails}>カテゴリ: {item.category} | 料金: ¥{item.price} | 時間: {item.duration}分</Text>
       <TouchableOpacity style={styles.bookButton} onPress={() => handleBookSkill(item)}>
         <Text style={styles.bookButtonText}>予約する</Text>
       </TouchableOpacity>
     </View>
   );
 
-  // カテゴリボタンのレンダリング
   const renderCategoryButton = ({ item }: { item: string }) => (
     <TouchableOpacity
       style={[
@@ -126,41 +151,55 @@ export default function SkillListScreen() {
     </TouchableOpacity>
   );
 
+  // ★変更点: 並び替えボタンのUI定義
+  const SortButton = ({ type, label }: { type: SortOption, label: string }) => (
+    <TouchableOpacity
+      style={[styles.sortButton, sortOption === type ? styles.sortButtonSelected : {}]}
+      onPress={() => setSortOption(type)}
+    >
+      <Text style={[styles.sortButtonText, sortOption === type ? styles.sortButtonTextSelected : {}]}>{label}</Text>
+    </TouchableOpacity>
+  );
+
   return (
     <SafeAreaView style={styles.container}>
-      {/* 検索入力欄 */}
       <TextInput
         style={styles.searchInput}
         placeholder="スキルを検索 (タイトル、カテゴリ、講師名など)"
         value={searchQuery}
         onChangeText={setSearchQuery}
-        clearButtonMode="always" 
+        clearButtonMode="always"
         placeholderTextColor="#888"
       />
 
-      {/* カテゴリフィルターのFlatList */}
       <View style={styles.categoryFilterContainer}>
         <FlatList
           data={categories}
           renderItem={renderCategoryButton}
           keyExtractor={(item) => item}
-          horizontal 
-          showsHorizontalScrollIndicator={false} 
+          horizontal
+          showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.categoryListContent}
         />
       </View>
 
+      {/* ★変更点: 並び替えボタンのコンテナを追加 */}
+      <View style={styles.sortContainer}>
+        <SortButton type="title" label="タイトル順" />
+        <SortButton type="newest" label="新着順" />
+      </View>
+
       {filteredSkills.length === 0 ? (
         <Text style={styles.emptyText}>
-          {searchQuery || (selectedCategory && selectedCategory !== '全て') 
-            ? '検索条件に一致するスキルが見つかりませんでした。' 
+          {searchQuery || (selectedCategory && selectedCategory !== '全て')
+            ? '検索条件に一致するスキルが見つかりませんでした。'
             : 'スキルがまだ登録されていません。'}
         </Text>
       ) : (
         <FlatList
           data={filteredSkills}
           renderItem={renderSkillItem}
-          keyExtractor={(item) => item.id} 
+          keyExtractor={(item) => item.id}
           contentContainerStyle={styles.listContent}
         />
       )}
@@ -168,6 +207,7 @@ export default function SkillListScreen() {
   );
 }
 
+// ★変更点: 並び替えボタン関連のスタイルを追加
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -185,7 +225,7 @@ const styles = StyleSheet.create({
     fontSize: 18,
     color: '#333',
   },
-  searchInput: { 
+  searchInput: {
     backgroundColor: '#FFFFFF',
     borderRadius: 10,
     padding: 12,
@@ -201,12 +241,12 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   categoryFilterContainer: {
-    height: 50, 
+    height: 50,
     marginBottom: 10,
     borderBottomWidth: 1,
     borderBottomColor: '#EEE',
     backgroundColor: '#FFFFFF',
-    paddingLeft: 15, 
+    paddingLeft: 15,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
@@ -214,29 +254,55 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   categoryListContent: {
-    alignItems: 'center', 
-    paddingRight: 15, 
+    alignItems: 'center',
+    paddingRight: 15,
   },
   categoryButton: {
     paddingVertical: 8,
     paddingHorizontal: 15,
     borderRadius: 20,
-    backgroundColor: '#E3F2FD', 
+    backgroundColor: '#E3F2FD',
     marginRight: 10,
     borderWidth: 1,
     borderColor: '#BBDEBFB',
   },
   categoryButtonSelected: {
-    backgroundColor: '#2196F3', 
+    backgroundColor: '#2196F3',
     borderColor: '#1976D2',
   },
   categoryButtonText: {
-    color: '#3F51B5', 
+    color: '#3F51B5',
     fontWeight: 'bold',
     fontSize: 14,
   },
   categoryButtonTextSelected: {
-    color: '#FFFFFF', 
+    color: '#FFFFFF',
+  },
+  sortContainer: {
+    flexDirection: 'row',
+    justifyContent: 'flex-start',
+    paddingHorizontal: 15,
+    marginBottom: 10,
+  },
+  sortButton: {
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#BDBDBD',
+    marginRight: 10,
+  },
+  sortButtonSelected: {
+    backgroundColor: '#00796B',
+    borderColor: '#00796B',
+  },
+  sortButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#333',
+  },
+  sortButtonTextSelected: {
+    color: '#FFFFFF',
   },
   listContent: {
     paddingHorizontal: 15,
@@ -280,7 +346,7 @@ const styles = StyleSheet.create({
     color: '#555',
     paddingHorizontal: 20,
   },
-  bookButton: { 
+  bookButton: {
     backgroundColor: '#FF5722',
     borderRadius: 8,
     paddingVertical: 10,
