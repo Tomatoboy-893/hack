@@ -9,7 +9,7 @@ import {
     signInWithEmailAndPassword,
     sendPasswordResetEmail
 } from 'firebase/auth';
-import { doc, setDoc } from 'firebase/firestore';
+import { doc, setDoc, getDoc } from 'firebase/firestore';
 import { useNavigation } from '@react-navigation/native';
 
 export default function LoginScreen() {
@@ -30,14 +30,21 @@ export default function LoginScreen() {
             const user = userCredential.user;
 
             if (user) {
-                await setDoc(doc(db, 'users', user.uid), {
-                    uid: user.uid,
-                    email: user.email,
-                    userName: email.split('@')[0],
-                    bio: '',
-                    skills: [],
-                    createdAt: new Date().toISOString(),
-                });
+                const userDocRef = doc(db, 'users', user.uid);
+                const userDoc = await getDoc(userDocRef);
+
+                if (!userDoc.exists()) {
+                    // --- 変更箇所 ---: pointsフィールドを追加
+                    await setDoc(userDocRef, {
+                        uid: user.uid,
+                        email: user.email,
+                        userName: email.split('@')[0],
+                        bio: '',
+                        skills: [],
+                        points: 100, // 新規登録時にpointsを0で初期化
+                        createdAt: new Date().toISOString(),
+                    });
+                }
             }
             Alert.alert('登録成功', '新しいアカウントが作成されました！');
         } catch (error: any) {
@@ -64,7 +71,6 @@ export default function LoginScreen() {
         setError('');
         setSuccessMessage('');
         if (!email) {
-            // --- ここを変更しました ---
             setError('パスワードを再設定するには、まずメールアドレスを入力してください。');
             return;
         }
