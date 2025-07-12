@@ -11,7 +11,7 @@ interface Skill {
   title: string;
   description: string;
   category: string;
-  price: number;
+  points: number;
   instructorId: string;
   instructorName: string;
   duration: number;
@@ -75,7 +75,7 @@ export default function MySkillsManagementScreen() {
     <View style={styles.skillItem}>
       <Text style={styles.skillTitle}>{item.title}</Text>
       <Text style={styles.skillDescription}>{item.description}</Text>
-      <Text style={styles.skillDetails}>カテゴリ: {item.category} | 料金: ¥{item.price} | 時間: {item.duration}分</Text>
+      <Text style={styles.skillDetails}>カテゴリ: {item.category} | ポイント: {item.points}pt | 時間: {item.duration}分</Text>
       <TouchableOpacity 
         style={styles.manageButton}
         onPress={() => handleManageAvailability(item.id, item.title)}
