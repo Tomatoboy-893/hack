@@ -1,27 +1,30 @@
 // BookingScreen.tsx
 
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Button, Alert, ActivityIndicator, Platform, FlatList, TouchableOpacity, ScrollView } from 'react-native'; // ScrollViewを追加
-import { useRoute, useNavigation } from '@react-navigation/native'; 
-// DateTimePickerはもう使わないためインポートを削除またはコメントアウト
-// import DateTimePicker from '@react-native-community/datetimepicker'; 
+import { View, Text, StyleSheet, Button, Alert, ActivityIndicator, Platform, FlatList, TouchableOpacity, ScrollView } from 'react-native'; 
+import { useRoute, useNavigation, NavigationProp } from '@react-navigation/native';
 import { auth, db } from './firebaseConfig'; 
-// Firestoreのデータ取得にonSnapshot, query, collection, orderBy, doc, updateDocを追加
-import { collection, addDoc, query, orderBy, onSnapshot, doc, updateDoc } from 'firebase/firestore'; 
+import { collection, query, orderBy, onSnapshot, doc, updateDoc, runTransaction } from 'firebase/firestore';
+
+// React Navigationのルートとパラメータの型定義
+type RootStackParamList = {
+  Login: undefined;
+  // 必要に応じて他のルートもここに追加します
+};
 
 // 開催日程スロットの型定義
 interface AvailabilitySlot {
-  id: string; // ドキュメントID
-  startTime: string; // ISO文字列
-  endTime: string; // ISO文字列
-  status: 'available' | 'booked'; // 予約状況
+  id: string; 
+  startTime: string; 
+  endTime: string; 
+  status: 'available' | 'booked'; 
   createdAt: string;
-  instructorId: string; // 講師IDも追加
+  instructorId: string; 
 }
 
 export default function BookingScreen() {
   const route = useRoute();
-  const navigation = useNavigation();
+  const navigation = useNavigation<NavigationProp<RootStackParamList>>();
   const { skillId, skillTitle, skillPrice, instructorId, instructorName } = route.params as { 
     skillId: string; 
     skillTitle: string; 
@@ -30,57 +33,71 @@ export default function BookingScreen() {
     instructorName: string; 
   }; 
 
-  // 選択された開催日程スロットを管理するstateを追加
-  const [availableSlots, setAvailableSlots] = useState<AvailabilitySlot[]>([]); // 講師の空き枠リスト
-  const [selectedSlot, setSelectedSlot] = useState<AvailabilitySlot | null>(null); // 選択された空き枠
+  const [availableSlots, setAvailableSlots] = useState<AvailabilitySlot[]>([]); 
+  const [selectedSlot, setSelectedSlot] = useState<AvailabilitySlot | null>(null); 
 
-  const [isLoading, setIsLoading] = useState(true); // スロット読み込み中のローディング
-  const [isBooking, setIsBooking] = useState(false); // 予約中のローディング
+  const [isLoading, setIsLoading] = useState(true); 
+  const [isBooking, setIsBooking] = useState(false); 
 
   // 講師の利用可能なスロットをFirestoreから取得
   useEffect(() => {
-    if (!skillId) { // skillIdがない場合はエラー
+    console.log("BookingScreen: useEffectが実行されました。");
+    console.log("BookingScreen: 取得対象のskillId:", skillId);
+
+    if (!skillId) { 
       Alert.alert("エラー", "スキル情報がありません。");
       setIsLoading(false);
       return;
     }
 
-    // ★変更: 'skills/{skillId}/availability' からデータを取得
     const availabilityRef = collection(db, 'skills', skillId, 'availability');
-    // 現在時刻より未来の「利用可能」なスロットのみを取得し、開始時刻でソート
     const q = query(
       availabilityRef, 
       orderBy('startTime', 'asc')
     );
     
     const unsubscribe = onSnapshot(q, (snapshot) => {
+      console.log("BookingScreen: onSnapshotがデータを取得しました。");
+      console.log("BookingScreen: 取得されたドキュメント数:", snapshot.size);
+
       const fetchedSlots: AvailabilitySlot[] = [];
       const now = new Date();
+      
       snapshot.forEach(doc => {
         const slotData = doc.data() as Omit<AvailabilitySlot, 'id'>;
         const slotStartTime = new Date(slotData.startTime);
-        // ステータスが'available'で、かつ開始時刻が現在時刻より未来のスロットのみを対象
-        if (slotData.status === 'available' && slotStartTime > now) {
+        
+        console.log("BookingScreen: スロットデータ:", doc.id, slotData);
+        console.log("BookingScreen: スロットステータス:", slotData.status, "開始時刻(UTCミリ秒):", slotStartTime.getTime(), "現在時刻(UTCミリ秒):", now.getTime()); 
+
+        if (slotData.status === 'available' && slotStartTime.getTime() > now.getTime()) {
           fetchedSlots.push({ id: doc.id, ...slotData });
+          console.log("BookingScreen: スロットがフィルタリングを通過しました:", doc.id);
+        } else {
+          console.log("BookingScreen: スロットがフィルタリングで除外されました:", doc.id, "ステータス:", slotData.status, "時刻条件:", slotStartTime.getTime() > now.getTime());
         }
       });
       setAvailableSlots(fetchedSlots);
       setIsLoading(false);
+      console.log("BookingScreen: 最終的に表示されるスロット数:", fetchedSlots.length);
     }, (error) => {
       console.error("開催日程取得エラー:", error);
+      if (error.code) {
+        console.error("Firebase Error Code:", error.code);
+        console.error("Firebase Error Message:", error.message);
+      }
       Alert.alert("エラー", "開催日程の読み込みに失敗しました。");
       setIsLoading(false);
     });
 
-    return () => unsubscribe(); // リスナーのクリーンアップ
-  }, [skillId]); // skillIdが変わったら再実行
+    return () => unsubscribe(); 
+  }, [skillId]); 
 
-  // 予約するボタンのハンドラー
   const handleBookNow = async () => {
     const user = auth.currentUser;
     if (!user) {
       Alert.alert("エラー", "ログインしていません。");
-      navigation.navigate('Login' as never);
+      navigation.navigate('Login');
       return;
     }
     if (!selectedSlot) {
@@ -93,54 +110,64 @@ export default function BookingScreen() {
       return;
     }
 
-    setIsBooking(true); // 予約中のローディング開始
+    setIsBooking(true); 
 
     try {
-      // 1. bookingsコレクションに予約データを作成
-      const bookingsCollectionRef = collection(db, 'bookings');
-      await addDoc(bookingsCollectionRef, {
-        skillId: skillId,
-        skillTitle: skillTitle,
-        skillPrice: skillPrice,
-        instructorId: instructorId,
-        instructorName: instructorName,
-        studentId: user.uid, // 予約者のUID
-        studentEmail: user.email, // 予約者のメールアドレス
-        bookingDateTime: selectedSlot.startTime, // 選択されたスロットの開始時刻を予約日時とする
-        bookingEndTime: selectedSlot.endTime,   // 選択されたスロットの終了時刻を予約終了日時とする
-        status: 'pending', // 初期ステータスは保留中
-        availabilitySlotId: selectedSlot.id, // どの空き枠が予約されたか記録
-        createdAt: new Date().toISOString(),
-      });
+      await runTransaction(db, async (transaction) => {
+        const slotDocRef = doc(db, 'skills', skillId, 'availability', selectedSlot.id);
+        const slotDoc = await transaction.get(slotDocRef);
 
-      // 2. 予約された開催日程スロットのステータスを'booked'に更新
-      // ★変更: skills/{skillId}/availability/{slotId} のステータスを更新
-      const slotDocRef = doc(db, 'skills', skillId, 'availability', selectedSlot.id);
-      await updateDoc(slotDocRef, {
-        status: 'booked',
+        if (!slotDoc.exists() || slotDoc.data()?.status !== 'available') {
+          throw new Error("この日程はすでに予約されているか、利用できません。");
+        }
+
+        transaction.update(slotDocRef, {
+          status: 'booked',
+        });
+
+        const newBookingRef = doc(collection(db, 'bookings'));
+        transaction.set(newBookingRef, {
+          skillId: skillId,
+          skillTitle: skillTitle,
+          skillPrice: skillPrice,
+          instructorId: instructorId,
+          instructorName: instructorName,
+          studentId: user.uid, 
+          studentEmail: user.email, 
+          bookingDateTime: selectedSlot.startTime, 
+          bookingEndTime: selectedSlot.endTime,   
+          status: 'confirmed', // 予約完了として初期ステータスを設定
+          availabilitySlotId: selectedSlot.id, 
+          createdAt: new Date().toISOString(),
+        });
+
+        console.log("BookingScreen: トランザクションがコミットされました。");
       });
 
       Alert.alert('予約完了', `「${skillTitle}」の予約が完了しました！\n選択日時: ${new Date(selectedSlot.startTime).toLocaleString()}`);
-      navigation.goBack(); // スキル一覧画面に戻る
-    } catch (error) {
+      navigation.goBack(); 
+    } catch (error: any) {
       console.error("予約エラー:", error);
-      Alert.alert("予約失敗", "予約中にエラーが発生しました。");
+      if (error.message === "この日程はすでに予約されているか、利用できません。") {
+        Alert.alert("予約失敗", error.message);
+      } else {
+        Alert.alert("予約失敗", "予約中にエラーが発生しました。");
+      }
     } finally {
-      setIsBooking(false); // ローディング終了
+      setIsBooking(false); 
     }
   };
 
-  // 開催日程スロットのレンダリング
   const renderAvailabilitySlot = ({ item }: { item: AvailabilitySlot }) => {
     const start = new Date(item.startTime);
     const end = new Date(item.endTime);
-    const isSelected = selectedSlot?.id === item.id; // 選択中かどうか
+    const isSelected = selectedSlot?.id === item.id; 
     
     return (
       <TouchableOpacity 
         style={[styles.slotOption, isSelected ? styles.slotOptionSelected : {}]} 
         onPress={() => setSelectedSlot(item)}
-        disabled={item.status === 'booked'} // 予約済みのスロットは選択不可
+        disabled={item.status === 'booked'} 
       >
         <Text style={styles.slotOptionText}>
           {start.toLocaleDateString()} {start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
@@ -163,10 +190,10 @@ export default function BookingScreen() {
   }
 
   return (
-    <ScrollView contentContainerStyle={styles.scrollContainer}> {/* ScrollViewを追加 */}
+    <ScrollView contentContainerStyle={styles.scrollContainer}> 
       <View style={styles.container}>
         <Text style={styles.title}>スキル予約</Text>
-        <Text style={styles.skillTitle}>スキル: {skillTitle}</Text>
+        <Text style={styles.skillTitle}>{skillTitle}</Text>
         <Text style={styles.skillDetails}>講師: {instructorName} | 料金: ¥{skillPrice}</Text>
 
         <Text style={styles.label}>予約可能な日時を選択してください:</Text>
@@ -179,7 +206,7 @@ export default function BookingScreen() {
             keyExtractor={(item) => item.id}
             style={styles.slotList}
             contentContainerStyle={styles.slotListContent}
-            scrollEnabled={false} // 親ScrollViewでスクロールするため、FlatList自体はスクロールさせない
+            scrollEnabled={false} 
           />
         )}
 
@@ -190,14 +217,13 @@ export default function BookingScreen() {
           </Text>
         )}
 
-        <View style={styles.buttonContainer}>
-          <Button 
-            title="このスキルを予約する" 
-            onPress={handleBookNow} 
-            color="#FF5722" 
-            disabled={isBooking || !selectedSlot} // 予約中またはスロット未選択の場合は無効
-          />
-        </View>
+        <TouchableOpacity 
+          style={styles.bookButton} 
+          onPress={handleBookNow} 
+          disabled={isBooking || !selectedSlot} 
+        >
+          <Text style={styles.bookButtonText}>このスキルを予約する</Text>
+        </TouchableOpacity>
 
         {isBooking && (
           <ActivityIndicator size="large" color="#FF5722" style={styles.loadingIndicator} />
@@ -208,18 +234,16 @@ export default function BookingScreen() {
 }
 
 const styles = StyleSheet.create({
-  scrollContainer: { // ScrollViewのコンテンツ用スタイル
+  scrollContainer: { 
     flexGrow: 1,
     justifyContent: 'center',
     paddingVertical: 20,
     backgroundColor: '#E0F2F7',
   },
   container: {
-    // flex: 1, // ScrollViewの子なので不要
     backgroundColor: '#E0F2F7',
     alignItems: 'center',
     padding: 20,
-    // width: '100%', // ScrollViewの子なので不要
   },
   loadingContainer: {
     flex: 1,
@@ -261,7 +285,7 @@ const styles = StyleSheet.create({
   },
   slotList: {
     width: '100%',
-    maxHeight: 250, // リストの最大高さを設定してスクロール可能にする (FlatListはスクロールしないので、表示領域の制限になる)
+    maxHeight: 250, 
     marginTop: 10,
   },
   slotListContent: {
@@ -270,7 +294,7 @@ const styles = StyleSheet.create({
   },
   slotOption: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 8,
+    borderRadius: 10,
     padding: 15,
     marginBottom: 10,
     width: '90%',
@@ -283,7 +307,7 @@ const styles = StyleSheet.create({
     borderColor: 'transparent',
   },
   slotOptionSelected: {
-    borderColor: '#00796B', // 選択されたスロットの枠線色
+    borderColor: '#00796B', 
     borderWidth: 2,
   },
   slotOptionText: {
@@ -303,11 +327,30 @@ const styles = StyleSheet.create({
     color: '#00796B',
     textAlign: 'center',
   },
-  buttonContainer: {
+  bookButton: { 
     width: '80%',
+    backgroundColor: '#FF5722',
+    borderRadius: 10,
+    paddingVertical: 12,
+    alignItems: 'center',
     marginTop: 30,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.2,
+    shadowRadius: 5,
+    elevation: 5,
+  },
+  bookButtonText: {
+    color: '#FFFFFF',
+    fontSize: 18,
+    fontWeight: 'bold',
   },
   loadingIndicator: {
     marginTop: 20,
+  },
+  loadingText: {
+    marginTop: 10,
+    fontSize: 18,
+    color: '#333',
   },
 });
