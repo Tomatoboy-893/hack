@@ -39,7 +39,7 @@ export default function SkillSubmissionScreen() {
   const navigation = useNavigation();
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
-  const [price, setPrice] = useState('');
+  const [points, setPoints] = useState('');
   const [duration, setDuration] = useState('');
   const [category, setCategory] = useState('');
 
@@ -87,16 +87,16 @@ export default function SkillSubmissionScreen() {
       return;
     }
 
-    if (!title || !description || !category || !price || !duration) {
+    if (!title || !description || !category || !points || !duration) {
       Alert.alert("入力エラー", "すべての項目を入力してください。");
       return;
     }
 
-    const parsedPrice = parseFloat(price);
+    const parsedPoints = parseFloat(points);
     const parsedDuration = parseInt(duration, 10);
 
-    if (isNaN(parsedPrice) || parsedPrice <= 0) {
-      Alert.alert("入力エラー", "料金は正の数値を入力してください。");
+    if (isNaN(parsedPoints) || parsedPoints <= 0) {
+      Alert.alert("入力エラー", "ポイントは正の数値を入力してください。");
       return;
     }
     if (isNaN(parsedDuration) || parsedDuration <= 0) {
@@ -111,7 +111,7 @@ export default function SkillSubmissionScreen() {
         title: title,
         description: description,
         category: category,
-        price: parsedPrice,
+        points: parsedPoints,
         duration: parsedDuration,
         instructorId: instructorInfo.uid,
         instructorName: instructorInfo.userName,
@@ -183,7 +183,7 @@ export default function SkillSubmissionScreen() {
           ))}
         </View>
 
-        <TextInput style={styles.input} placeholder="料金 (¥)" value={price} onChangeText={setPrice} keyboardType="numeric" />
+        <TextInput style={styles.input} placeholder="ポイント (pt)" value={points} onChangeText={setPoints} keyboardType="numeric" />
         <TextInput style={styles.input} placeholder="所要時間 (分)" value={duration} onChangeText={setDuration} keyboardType="numeric" />
 
         <TouchableOpacity style={styles.button} onPress={handleSubmitSkill} disabled={isLoading}>
