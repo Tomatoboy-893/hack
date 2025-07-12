@@ -4,10 +4,10 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, TextInput, StyleSheet, Alert, ActivityIndicator, ScrollView, TouchableOpacity } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { auth, db } from './firebaseConfig';
-import { collection, addDoc, doc, getDoc } from 'firebase/firestore';
+import { collection, addDoc, doc, getDoc, serverTimestamp } from 'firebase/firestore'; // serverTimestampを追加
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 
-// ★変更点: カテゴリをさらに拡充
+// カテゴリをさらに拡充
 const HIERARCHICAL_CATEGORIES = [
   {
     parent: 'IT・テクノロジー',
@@ -43,21 +43,92 @@ export default function SkillSubmissionScreen() {
   const [duration, setDuration] = useState('');
   const [category, setCategory] = useState('');
 
-  // ★変更点: 開いている親カテゴリを管理するstate
+  // 開いている親カテゴリを管理するstate
   const [expandedCategory, setExpandedCategory] = useState<string | null>(null);
 
   const [isLoading, setIsLoading] = useState(false);
   const [instructorInfo, setInstructorInfo] = useState<{ uid: string; userName: string } | null>(null);
 
   useEffect(() => {
-    // ... 既存のfetchInstructorInfoロジック (変更なし)
+    // 講師情報を取得するロジック
+    const fetchInstructorInfo = async () => {
+      const user = auth.currentUser;
+      if (!user) {
+        Alert.alert("エラー", "スキル登録にはログインが必要です。");
+        navigation.navigate('Login' as never); // ログイン画面へリダイレクト
+        return;
+      }
+
+      try {
+        const userDocRef = doc(db, 'users', user.uid);
+        const userDocSnap = await getDoc(userDocRef);
+
+        if (userDocSnap.exists()) {
+          setInstructorInfo({
+            uid: user.uid,
+            userName: userDocSnap.data().userName || user.email // プロフィール名がなければメールアドレスを使用
+          });
+        } else {
+          Alert.alert("エラー", "ユーザープロフィールが見つかりません。プロフィール登録を完了してください。");
+          navigation.navigate('ProfileRegistration' as never); // プロフィール登録画面へ
+        }
+      } catch (error) {
+        console.error("講師情報取得エラー:", error);
+        Alert.alert("エラー", "講師情報の取得に失敗しました。");
+      }
+    };
+
+    fetchInstructorInfo();
   }, []);
 
   const handleSubmitSkill = async () => {
-    // ... 既存のhandleSubmitSkillロジック (変更なし)
+    if (!instructorInfo) {
+      Alert.alert("エラー", "講師情報が読み込まれていません。");
+      return;
+    }
+
+    if (!title || !description || !category || !price || !duration) {
+      Alert.alert("入力エラー", "すべての項目を入力してください。");
+      return;
+    }
+
+    const parsedPrice = parseFloat(price);
+    const parsedDuration = parseInt(duration, 10);
+
+    if (isNaN(parsedPrice) || parsedPrice <= 0) {
+      Alert.alert("入力エラー", "料金は正の数値を入力してください。");
+      return;
+    }
+    if (isNaN(parsedDuration) || parsedDuration <= 0) {
+      Alert.alert("入力エラー", "所要時間は正の整数を入力してください。");
+      return;
+    }
+
+    setIsLoading(true);
+
+    try {
+      await addDoc(collection(db, 'skills'), {
+        title: title,
+        description: description,
+        category: category,
+        price: parsedPrice,
+        duration: parsedDuration,
+        instructorId: instructorInfo.uid,
+        instructorName: instructorInfo.userName,
+        createdAt: serverTimestamp(), // スキル登録日時
+      });
+
+      Alert.alert("成功", "スキルが正常に登録されました！");
+      navigation.goBack(); // 前の画面に戻る
+    } catch (error) {
+      console.error("スキル登録エラー:", error);
+      Alert.alert("エラー", "スキルの登録に失敗しました。");
+    } finally {
+      setIsLoading(false);
+    }
   };
   
-  // ★変更点: アコーディオンを開閉する関数
+  // アコーディオンを開閉する関数
   const toggleAccordion = (parentCategory: string) => {
     if (expandedCategory === parentCategory) {
       setExpandedCategory(null); // 同じものを再度タップしたら閉じる
@@ -75,7 +146,7 @@ export default function SkillSubmissionScreen() {
         <TextInput style={styles.input} placeholder="スキルタイトル..." value={title} onChangeText={setTitle} />
         <TextInput style={[styles.input, styles.textArea]} placeholder="スキルの説明..." value={description} onChangeText={setDescription} multiline />
         
-        {/* ★変更点: カテゴリ選択をアコーディオンUIに変更 */}
+        {/* カテゴリ選択をアコーディオンUIに変更 */}
         <View style={styles.categorySection}>
           <Text style={styles.label}>カテゴリを選択</Text>
           {HIERARCHICAL_CATEGORIES.map((catGroup) => (
@@ -123,7 +194,7 @@ export default function SkillSubmissionScreen() {
   );
 }
 
-// ★変更点: スタイルをアコーディオンUI用に更新
+// スタイルをアコーディオンUI用に更新
 const styles = StyleSheet.create({
   scrollContainer: { flexGrow: 1, justifyContent: 'center', paddingVertical: 20, backgroundColor: '#F7F9FA' },
   container: { alignItems: 'center', padding: 20, width: '100%' },
