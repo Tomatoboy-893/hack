@@ -20,7 +20,7 @@ interface Skill {
   title: string;
   description: string;
   category: string;
-  price: number;
+  points: number;
   instructorId: string;
   instructorName: string;
   duration: number;
@@ -129,7 +129,7 @@ export default function SkillListScreen() {
   };
 
   const handleBookSkill = (skill: Skill) => {
-    navigation.navigate('Booking', { skillId: skill.id, skillTitle: skill.title, skillPrice: skill.price, instructorId: skill.instructorId, instructorName: skill.instructorName });
+    navigation.navigate('Booking', { skillId: skill.id, skillTitle: skill.title, skillPoints: skill.points, instructorId: skill.instructorId, instructorName: skill.instructorName });
   };
   
   const renderSkillItem = ({ item }: { item: Skill }) => (
@@ -137,7 +137,7 @@ export default function SkillListScreen() {
       <Text style={styles.skillTitle}>{item.title}</Text>
       <Text style={styles.skillInstructor}>講師: {item.instructorName}</Text>
       <Text style={styles.skillDescription}>{item.description}</Text>
-      <Text style={styles.skillDetails}>カテゴリ: {item.category} | 料金: ¥{item.price} | 時間: {item.duration}分</Text>
+      <Text style={styles.skillDetails}>カテゴリ: {item.category} | ポイント: {item.points}pt | 時間: {item.duration}分</Text>
       <TouchableOpacity style={styles.bookButton} onPress={() => handleBookSkill(item)}>
         <Text style={styles.bookButtonText}>予約する</Text>
       </TouchableOpacity>
