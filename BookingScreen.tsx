@@ -158,7 +158,7 @@ export default function BookingScreen() {
         });
       });
 
-      // --- 変更箇所 ---: 予約完了アラートの後に画面遷移するように修正
+
       Alert.alert(
         '予約完了',
         `「${skillTitle}」の予約が完了しました！`,
@@ -170,7 +170,7 @@ export default function BookingScreen() {
 
     } catch (error: any) {
       console.error("予約エラー:", error);
-      // --- 変更箇所 ---: エラーメッセージをより具体的に表示するように修正
+
       let errorMessage = "予約中に予期せぬエラーが発生しました。";
       if (typeof error.message === 'string') {
           if (error.message.includes("ポイントが不足しています")) {
@@ -429,3 +429,4 @@ const styles = StyleSheet.create({
     color: '#333',
   },
 });
+
