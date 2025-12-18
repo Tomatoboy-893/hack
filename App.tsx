@@ -5,7 +5,6 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { Text, View, StyleSheet, ActivityIndicator, Button } from 'react-native'; // Buttonを使用
 
-// 各画面コンポーネントをインポート
 import LoginScreen from './LoginScreen'; 
 import ProfileRegistrationScreen from './ProfileRegistrationScreen'; 
 import SkillListScreen from './SkillListScreen'; 
@@ -42,7 +41,6 @@ function AuthStack() {
   );
 }
 
-// --- 認証済みユーザー用のナビゲーター（アプリスタック） ---
 function AppStack() {
   // ログアウト処理
   const handleLogout = async () => {
